@@ -1,6 +1,7 @@
 import gzip
 from pathlib import Path
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 
@@ -53,8 +54,9 @@ class ScannerTests(unittest.TestCase):
             filename = Path(folder)/'records.db'
             with EventJournal(filename) as ledger:
                 ledger.append({'schema':'test','sample':17})
-            with sqlite3.connect(filename) as db:
-                db.execute("UPDATE events SET body='{}'")
+            with closing(sqlite3.connect(filename)) as db:
+                with db:
+                    db.execute("UPDATE events SET body='{}'")
             with self.assertRaises(ValueError):
                 EventJournal(filename)
 
