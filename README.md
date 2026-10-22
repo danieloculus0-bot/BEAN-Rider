@@ -1,6 +1,6 @@
 # BEAN-Rider
 
-**Automotive intelligence laboratory | v0.3: wired OBD-II live cockpit research**
+**Automotive intelligence laboratory | v0.4: Jetson cockpit and wired OBD-II**
 
 BEAN-Rider is a standalone experimental companion to [BEAN Core](https://github.com/danieloculus0-bot/BEAN), initially motivated by a custom 2012 Maserati GranTurismo 4.7L twin-turbo concept. It is not an ECU firmware project, a validated vehicle tune, or a live automotive controller.
 
@@ -29,6 +29,36 @@ python -m bean_rider inspect-csv examples/example_telemetry.csv
 
 The demo emits a JSON report and `bean_bridge_event`. The compressed report and manifest are created at the specified output path, which is gitignored by default. `inspect-csv` only parses caller-provided records. The bundled example is **fabricated sample data**.
 
+
+## v0.4 Jetson 10-inch standard cockpit and phone projection contract
+
+**Apple CarPlay and Android Auto are standard built-in cockpit applications** (always visible, not optional feature unlocks) alongside the engine dashboard. BEAN-Rider supplies the fullscreen touchscreen navigation, receiver readiness API, and local executable handoff for either service. **The actual phone projection video, audio transport, pairing protocol, licensing, and touch input forwarding require a separate compatible receiver/software-hardware stack that is NOT supplied or emulated by this repository.** An unconfigured receiver is prominently shown as unavailable, not falsely as working. Stereo integration is a later adapter; the Jetson itself is the cockpit computer.
+
+An NVIDIA Jetson Orin Nano dev kit can use its USB Type-A host port for a **wired ELM327-compatible 16-pin OBD-II-to-USB interface**. The factory screen connection on that dev kit is **DisplayPort** (use DisplayPort-to-HDMI for an HDMI display); a typical touch monitor requires a second USB connection for touchscreen input. Select a Linux-compatible serial interface and confirm the actual `/dev/ttyUSB*` or `/dev/ttyACM*` port. The app never assumes hardware is installed merely because a menu item exists.
+
+```bash
+python -m bean_rider projection-status
+python -m bean_rider live --simulate --engine gm-ls
+# On an installed Jetson with a compatible OBD cable:
+python -m bean_rider live --port /dev/ttyUSB0 --engine gm-ls
+# Open http://127.0.0.1:8765 in kiosk/fullscreen browser on the 10-inch screen.
+```
+
+To connect **already-installed compatible receiver executables**, a local administrator may write an untracked configuration file (e.g. `evidence/receiver.json`):
+
+```json
+{
+  "schema": "bean.rider.receiver.config.v1",
+  "receivers": {
+    "carplay": {"executable": "/absolute/path/to/compatible/carplay-receiver", "args": []},
+    "android_auto": {"executable": "/absolute/path/to/compatible/android-auto-receiver", "args": []}
+  }
+}
+```
+
+Then start `python -m bean_rider live --simulate --projection-config evidence/receiver.json`. Pressing the standard app tile directly launches its configured receiver as a separate local process without a shell. Startup does **not** establish actual phone pairing, projection compatibility, MFi approval, or verified operation. No cloud/screen broadcasting endpoints are added. The local app-launch HTTP route checks the cockpit request origin and a custom header. Keep private receiver configuration and vehicle logs out of GitHub.
+
+Official references: [NVIDIA Orin Nano developer-kit port layout](https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/hardware_layout.html), [Python-OBD and ELM327](https://python-obd.readthedocs.io/en/latest/), and [Apple MFi/CarPlay](https://mfi.apple.com/en/how-it-works).
 
 ## v0.3 Wired OBD-II live dashboard and engine priority catalog
 

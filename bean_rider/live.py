@@ -17,6 +17,7 @@ from typing import Callable
 
 from .brain import RiderBrain
 from .engine_catalog import get_family
+from .headunit import ProjectionManager
 from .obd import Reader
 
 
@@ -106,13 +107,45 @@ small,.muted{color:#a8b4ac}.pill{border:1px solid #4d6c48;border-radius:30px;pad
 .card .name{font-size:.8rem;color:#a8b4ac}.card .value{font-size:2.1rem;font-weight:700;margin:5px 0}
 .card .unit{font-size:.8rem;color:#b6c9b5}.panel{margin-top:12px}h2{margin:0 0 10px;font-size:1rem}
 canvas{width:100%;height:210px;display:block}.warning{padding:9px 0;border-top:1px solid #344638}
+.apps{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}
+.app{min-height:68px;flex:1 1 155px;text-align:left;touch-action:manipulation;cursor:pointer;color:#eff8ec;
+ background:#223026;border:2px solid #4a5a43;border-radius:14px;font-weight:750;font-size:1.04rem;padding:13px}
+.app:focus-visible{outline:3px solid #b7ff61;outline-offset:2px}
+.app[disabled]{opacity:.7;cursor:default}.app strong{color:#b7ff61}
+#projection-panel{padding:12px 16px;background:#1b2c1d;border:1px solid #456544;border-radius:12px;min-height:55px}
+#projection-panel[hidden]{display:none}
+@media(max-width:760px){body{padding:13px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.card .value{font-size:1.7rem}}
+@media(orientation:landscape) and (max-height:650px){body{padding:8px 16px}.apps{margin:8px 0}.app{min-height:60px} .grid{margin:10px 0}}
+
 </style></head><body>
 <header><div><h1>BEAN <b>RIDER</b></h1><small id="family">Wired OBD-II engine brain</small></div><span id="state" class="pill">Connecting…</span></header>
-<div id="readings" class="grid"></div>
+<nav class="apps" aria-label="Standard BEAN-Rider cockpit applications">
+<button type="button" class="app" id="app-bean" aria-current="page" onclick="showBean()">🧠 <strong>BEAN</strong> Engine</button>
+<button type="button" class="app" id="app-carplay" onclick="openProjection('carplay')">Apple CarPlay</button>
+<button type="button" class="app" id="app-android_auto" onclick="openProjection('android_auto')">Android Auto</button>
+</nav>
+<div id="projection-panel" role="status" aria-live="polite" hidden></div>
+<main id="engine-main"><div id="readings" class="grid"></div>
 <section class="panel"><h2>Live engine speed</h2><canvas id="trend"></canvas><small>Recent RPM observations · readings depend on ECU and adapter availability</small></section>
-<section class="panel"><h2>Diagnostics and memory</h2><div id="warnings" class="muted">Waiting for the scanner.</div></section>
+<section class="panel"><h2>Diagnostics and memory</h2><div id="warnings" class="muted">Waiting for the scanner.</div></section></main>
 <footer><p class="muted" id="footer">Generic diagnostics only · No ECU writes</p></footer>
 <script>
+async function openProjection(kind){
+  const panel=document.getElementById('projection-panel');panel.hidden=false;
+  const app=projectionApps.find(item=>item.id===kind);
+  document.getElementById('engine-main').hidden=false;
+  if(!app||!app.receiver_executable_present){panel.textContent=(kind==='carplay'?'Apple CarPlay':'Android Auto')+' is standard in BEAN-Rider. Projection requires a separately installed compatible receiver; no stream is running.';return;}
+  panel.textContent='Starting compatible receiver process…';
+  try{const r=await fetch('/api/projection/'+kind+'/launch',{method:'POST',headers:{'X-BEAN-Cockpit':'receiver-launch','Content-Type':'application/json'}});
+  const j=await r.json();panel.textContent=r.ok?'Receiver process started; confirm pairing and actual projection on the receiver.':j.error;
+  }catch(e){panel.textContent='Receiver launch unavailable';}
+}
+function showBean(){document.getElementById('engine-main').hidden=false;document.getElementById('projection-panel').hidden=true;}
+let projectionApps=[];
+async function refreshProjection(){try{let r=await fetch('/api/projection',{cache:'no-store'});let d=await r.json();projectionApps=d.apps||[];
+  for(const a of projectionApps){const btn=document.getElementById('app-'+a.id);if(btn&&a.id!=='bean')btn.title=a.status.replaceAll('_',' ');}}
+  catch(e){} }
+refreshProjection();setInterval(refreshProjection,5000);
 const fields=[['rpm','RPM','rev/min'],['speed_kph','Speed','km/h'],['coolant_c','Coolant','°C'],['intake_c','Intake','°C'],['manifold_kpa','MAP','kPa'],['engine_load_pct','Load','%'],['short_fuel_trim_bank1_pct','STFT B1','%'],['long_fuel_trim_bank1_pct','LTFT B1','%']];
 const root=document.getElementById('readings');for(const [id,label,unit] of fields){const el=document.createElement('div');el.className='card';el.innerHTML='<div class="name"></div><div class="value">--</div><div class="unit"></div>';el.querySelector('.name').textContent=label;el.querySelector('.unit').textContent=unit;el.id='reading-'+id;root.appendChild(el);}
 function draw(data){const c=document.getElementById('trend');const w=c.clientWidth,h=210,dpr=devicePixelRatio||1;c.width=w*dpr;c.height=h*dpr;const x=c.getContext('2d');x.scale(dpr,dpr);x.clearRect(0,0,w,h);x.strokeStyle='#35503c';for(let j=0;j<4;j++){x.beginPath();x.moveTo(0,j*h/3);x.lineTo(w,j*h/3);x.stroke()}const vals=data.history.map(z=>z.rpm);const max=Math.max(1000,...vals.filter(v=>typeof v==='number'));x.strokeStyle='#b7ff61';x.lineWidth=2;x.beginPath();let started=false;vals.forEach((v,i)=>{if(typeof v!=='number'){started=false;return}const xx=(i/Math.max(1,vals.length-1))*w,yy=h-8-(v/max)*(h-20);if(!started)x.moveTo(xx,yy);else x.lineTo(xx,yy);started=true});x.stroke();}
@@ -121,11 +154,15 @@ update();setInterval(update,1000);
 </script></body></html>'''
 
 
-def make_handler(state: LiveState):
+def make_handler(state: LiveState, projections: ProjectionManager | None = None):
+    projections = projections if projections is not None else ProjectionManager()
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             if self.path == "/api/status":
                 content = json.dumps(state.snapshot(), sort_keys=True, allow_nan=False).encode('utf-8')
+                content_type = 'application/json; charset=utf-8'
+            elif self.path == "/api/projection":
+                content = json.dumps(projections.status(), sort_keys=True).encode('utf-8')
                 content_type = 'application/json; charset=utf-8'
             elif self.path in ("/", "/index.html"):
                 content = DASHBOARD_HTML.encode('utf-8')
@@ -140,16 +177,48 @@ def make_handler(state: LiveState):
             self.end_headers()
             self.wfile.write(content)
 
+        def do_POST(self):
+            prefix = "/api/projection/"
+            if not self.path.startswith(prefix) or not self.path.endswith("/launch"):
+                self.send_error(404)
+                return
+            kind = self.path[len(prefix):-len("/launch")]
+            # A malicious external webpage must not be able to POST a launch to
+            # the loopback cockpit. Cross-origin JS cannot set this custom header.
+            origin = self.headers.get("Origin")
+            host = self.headers.get("Host")
+            valid_hosts = {f"127.0.0.1:{self.server.server_port}",
+                           f"localhost:{self.server.server_port}"}
+            if (host not in valid_hosts or
+                (origin is not None and origin not in {"http://"+x for x in valid_hosts}) or
+                self.headers.get("X-BEAN-Cockpit") != "receiver-launch"):
+                self.send_error(403)
+                return
+            try:
+                result = projections.launch(kind)
+                code = 200
+            except (RuntimeError, ValueError, OSError) as exc:
+                result = {"error": str(exc), "projection_verified": False}
+                code = 409
+            content = json.dumps(result).encode('utf-8')
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+
         def log_message(self, *_args):
             return
     return Handler
 
 
 def run_dashboard(reader: Reader, db_path, config: LiveConfig,
-                  *, reporter: Callable[[dict], None] | None = None):
+                  *, reporter: Callable[[dict], None] | None = None,
+                  projections: ProjectionManager | None = None):
     """Run until Ctrl+C. Serial device stays open; all observations stay local."""
     state = LiveState(config)
-    server = ThreadingHTTPServer((config.host, config.http_port), make_handler(state))
+    server = ThreadingHTTPServer((config.host, config.http_port), make_handler(state, projections))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     print(f"BEAN-Rider dashboard: http://{config.host}:{server.server_port}", flush=True)

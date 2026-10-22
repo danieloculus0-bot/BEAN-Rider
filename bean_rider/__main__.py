@@ -19,6 +19,7 @@ from .power import decide
 from .learning import Comparison, evaluate_comparison, scoreboard
 from .engine_catalog import catalog
 from .live import LiveConfig, run_dashboard
+from .headunit import ProjectionManager, load_receiver_config
 
 
 def _output(value):
@@ -44,6 +45,10 @@ def main() -> int:
     live.add_argument("--db", type=Path, default=Path("evidence/rider-live.sqlite"))
     live.add_argument("--http-port", type=int, default=8765)
     live.add_argument("--interval", type=float, default=3.0, help="target seconds per full scanner pass")
+    live.add_argument("--projection-config", type=Path,
+                      help="local commands for separately installed, compatible CarPlay/Android Auto receivers")
+    p = sub.add_parser("projection-status", help="standard head-unit apps and receiver readiness")
+    p.add_argument("--projection-config", type=Path)
     p = sub.add_parser("inspect-msq", help="inspect local TunerStudio/Speeduino/rusEFI MSQ")
     p.add_argument("path", type=Path)
     p = sub.add_parser("extract-msq", help="extract one explicitly identified MSQ table")
@@ -93,13 +98,15 @@ def main() -> int:
         _output({"references":REFERENCE_ECOSYSTEMS, "execution":"offline_only"})
     elif args.operation == "engine-families":
         _output(catalog())
+    elif args.operation == "projection-status":
+        _output(ProjectionManager(load_receiver_config(args.projection_config)).status())
     elif args.operation == "live":
         if bool(args.port)==bool(args.simulate):
             parser.error("choose exactly one of --port or --simulate")
         config = LiveConfig(profile=args.engine, interval_s=args.interval,
                             http_port=args.http_port)
         reader = FakeOBDReader() if args.simulate else PythonOBDReader(args.port)
-        run_dashboard(reader,args.db,config)
+        run_dashboard(reader,args.db,config, projections=ProjectionManager(load_receiver_config(args.projection_config)))
     elif args.operation == "inspect-msq":
         _output(inspect_msq(args.path))
     elif args.operation == "extract-msq":
