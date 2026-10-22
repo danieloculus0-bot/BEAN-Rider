@@ -169,3 +169,8 @@ BEAN Core currently has a [hash-chained SQLite Journal](https://github.com/danie
 ## Development
 
 This repository currently has no general redistribution license. Source visibility alone does not confer rights to reuse. Contributions should preserve evidence and label the scope of claims.
+
+
+## Printable Jetson 10-inch cockpit hardware
+
+A parametric 3D-printable **Jetson Orin Nano head-unit mounting fixture** and versioned hardware profile are in [`hardware/jetson_head_unit/`](hardware/jetson_head_unit/README.md). Includes ventilated 160 x 126 mm tray, slotted 10-inch display-housing tabs and USB/OBD cable anchors. Test-fit prototypes only: no screen housing or vehicle fascia dimensions are assumed. Wired OBD-II requires an **active** J1962-to-USB ELM327/STN diagnostic adapter; independent fused ignition-aware Jetson power is required. Android Auto and CarPlay remain standard cockpit requirements but physical receiver compatibility is not yet validated.

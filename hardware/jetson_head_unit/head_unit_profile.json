@@ -1,0 +1,55 @@
+{
+  "schema": "bean.rider.hardware.jetson-head-unit.v1",
+  "name": "BEAN-Rider modular Jetson 10-inch cockpit",
+  "status": "prototype_fit-check_only_not_vehicle_certified",
+  "hardware": {
+    "compute": "Jetson Orin Nano Developer Kit, adaptable to other Jetson carrier boards",
+    "carrier_envelope_mm": [
+      103,
+      90.5
+    ],
+    "carrier_hole_locations_verified": false,
+    "screen_diagonal_in": 10.1,
+    "screen_external_dimensions_mm": null,
+    "screen_mount_pattern_mm": null,
+    "touch_interface": "USB HID, display dependent",
+    "video_interface": "Jetson Orin Nano Dev Kit DisplayPort; HDMI display may need DP-to-HDMI adapter",
+    "diagnostics": "SAE J1962 16-pin port to active ELM327/STN-compatible USB serial OBD adapter",
+    "power": "separate fused ignition-aware regulator and independent low-voltage disconnect; NOT powered from OBD pin 16"
+  },
+  "printed_parts": [
+    {
+      "part": "jetson_tray",
+      "quantity": 1,
+      "purpose": "ventilated universal Jetson mount plate with adjustable M3 slots"
+    },
+    {
+      "part": "screen_tab",
+      "quantity": 4,
+      "purpose": "housing mount tabs; not designed to clamp display glass"
+    },
+    {
+      "part": "cable_anchor",
+      "quantity": 2,
+      "purpose": "USB/OBD cable tie-down away from vehicle diagnostic port"
+    }
+  ],
+  "print_reference": {
+    "units": "mm",
+    "material": "prototype PETG/ASA with real heat-soak evaluation",
+    "no_glass_clamp": true,
+    "chassis_attachment_verified": false
+  },
+  "phone_projection": {
+    "required_in_finished_cockpit": [
+      "Android Auto",
+      "Apple CarPlay"
+    ],
+    "current_support": "software receiver handoff; compatible receiver hardware not validated"
+  },
+  "status_notes": [
+    "Measure screen outer housing and mount locations before making a final-fit enclosure.",
+    "Jetson screw pitches differ by board; generic tray slots are not a guaranteed fit.",
+    "Vehicle structural retention, power electronics, cabin impact and thermal testing remain unverified."
+  ]
+}
