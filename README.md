@@ -1,6 +1,6 @@
 # BEAN-Rider
 
-**Automotive intelligence laboratory | Phase 0: offline, instrument-first research**
+**Automotive intelligence laboratory | v0.2: engine-agnostic research workbench**
 
 BEAN-Rider is a standalone experimental companion to [BEAN Core](https://github.com/danieloculus0-bot/BEAN), initially motivated by a custom 2012 Maserati GranTurismo 4.7L twin-turbo concept. It is not an ECU firmware project, a validated vehicle tune, or a live automotive controller.
 
@@ -28,6 +28,57 @@ python -m bean_rider inspect-csv examples/example_telemetry.csv
 ```
 
 The demo emits a JSON report and `bean_bridge_event`. The compressed report and manifest are created at the specified output path, which is gitignored by default. `inspect-csv` only parses caller-provided records. The bundled example is **fabricated sample data**.
+
+
+## v0.2 Engine brain, scanners, maps and learning (October 2026)
+
+The **platform is engine-agnostic by explicit engine and ECU profiles**, not universal ECU access. This release adds actual software modules and independent tests:
+
+- `bean_rider.obd`: **read-only** ELM327/OBD-II polling (optional `python-OBD` package), supported generic live PIDs, fault-code scanning, optional persistent observations. The standard OBD-II interface cannot read or write arbitrary ignition/injection ECU maps or single-cylinder trims. Missing PIDs remain explicitly unknown.
+- `bean_rider.brain` + `bean_rider.journal`: continuous operation with SQLite-backed, hash-chained append-only observations, repeat-fault memory, restart/replay verification and gzip export. The ledger is private/local by default.
+- `bean_rider.calibration`: original versioned JSON calibration grid, dimensional checks, interpolation, explicit offline cell edits, diff, and read-only XML `.msq` inspection/extraction for compatible TunerStudio projects. ECU-specific axis names, units and orientation must be supplied rather than guessed. **No flashing.**
+- `bean_rider.profiles`: basic engine-agnostic profiles and versioned references to Speeduino and rusEFI configuration ecosystems. Compatibility does **not** imply copying community tunes or using them on unrelated engines.
+- `bean_rider.injectors`: evidence-based cylinder-specific **simulated compensation review** with failure/worsening detection and more frequent warnings. Physical injector leakage is not assumed fixable by tuning, and generic OBD cannot identify individual injector flow. No live injector compensation or control is installed.
+- `bean_rider.learning`: baseline/candidate matched comparison, signed outcome rewards, durable ledger scoreboard, duplicate receipt detection, and negative outcome retention. It is *not* a connected BEAN SpongeTD learner or actual vehicle auto-tuning yet.
+- `bean_rider.power`: park/sleep **advisory policy**; a compatible power controller must implement real low-voltage cutoff and sleep behavior. A permanently attached OBD dongle may have continuous battery power, even when the ignition is off.
+
+### CLI workbench
+
+```bash
+python -m unittest discover -s tests -v
+python -m bean_rider scan-obd --simulate --db evidence/rider-brain.sqlite
+# Optional serial ELM327 OBD-II hardware (pip install python-OBD):
+python -m bean_rider scan-obd --port COM4 --db evidence/rider-brain.sqlite --samples 0 --interval 5
+python -m bean_rider verify-journal evidence/rider-brain.sqlite
+python -m bean_rider inspect-msq path/to/your_tune.msq
+python -m bean_rider edit-map examples/example_map.json evidence/edited_map.json --x 1 --y 0 --value 51
+python -m bean_rider compare-maps examples/example_map.json evidence/edited_map.json
+python -m bean_rider review-injector examples/example_injector_trial.json --db evidence/rider-brain.sqlite
+python -m bean_rider scoreboard evidence/rider-brain.sqlite
+python -m bean_rider power-plan --ignition off --voltage 12.4 --off-seconds 150
+python -m bean_rider ecosystems
+```
+
+For a complete MSQ 2D map extraction use `extract-msq` with explicit `--table`,
+`--x-variable`, `--y-variable`, `--profile`, `--ecu-family`, `--x-unit`,
+`--y-unit`, `--value-unit`, and `--output`. Check the official firmware-specific
+`.ini` to identify table names, units and row ordering.
+
+### Open-source configuration references
+
+- [Speeduino reference .ini](https://github.com/speeduino/speeduino/blob/master/reference/speeduino.ini) and [Speeduino Tunes](https://github.com/speeduino/Tunes). Speeduino's tune library identifies a **CC BY-NC 4.0** license; no sample tune is vendored here. Firmware signatures and engine/hardware compatibility matter.
+- [rusEFI firmware and console](https://github.com/rusefi/rusefi), [public tune/log catalog](https://wiki.rusefi.com/Online/). Its core has GPLv3 and additional conditions; no code is copied or linked into this repository.
+- Users must verify individual third-party permissions, compatibility, emissions requirements and licensing before using or modifying ECU firmware or tunes.
+
+### Permanent installation concept
+
+Connect a certified/appropriate OBD-II adapter, local computing unit, and **independent switched/low-voltage-disconnect power management**. Use ignition sensing, onboard storage, reconnect-after-start, sensible polling frequencies and a known wake/sleep strategy. The software's `power-plan` command does not physically switch power. Bluetooth dongles and pin-16-powered accessories can drain the parked battery.
+
+Do not upload private VINs, complete GPS/location traces, owner details or unredacted trip logs to the public repo. No automatic public telemetry exports exist.
+
+### Implementation boundaries
+
+This version **does not** reflash factory ECUs, set boost/fuel/ignition tables in a running engine, remotely command actuators, confirm injector mechanical conditions, or claim universal support for every OEM ECU. Live test data, real injector-trim sensors, hardware clocks, an installer, GUI, and BEAN Core reward-loop ingestion remain future work. The first on-vehicle stage is a read-only logger; calibration changes require a separately validated ECU-specific adapter and proper instrumentation.
 
 ## Model boundaries and engineering notes
 

@@ -1,0 +1,13 @@
+{
+  "schema": "bean.rider.map.v1",
+  "name": "illustrative-ve-grid",
+  "engine_profile": "generic-test-four-cylinder",
+  "ecu_family": "synthetic",
+  "x_unit": "rpm",
+  "y_unit": "kPa",
+  "value_unit": "%",
+  "x_axis": [1000, 2000, 3000],
+  "y_axis": [30, 100],
+  "values": [[40, 50, 60], [70, 80, 90]],
+  "source": "hand_written_fabricated_example_not_vehicle_calibration"
+}
