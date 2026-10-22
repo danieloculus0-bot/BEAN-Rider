@@ -29,20 +29,31 @@ class BrainReport:
 class RiderBrain:
     def __init__(self, db_path: str | Path):
         self.journal = EventJournal(db_path)
+        # Rebuild on restart, then count incrementally. Re-reading the entire
+        # driving history at each scan creates quadratic latency for a logger.
+        self._seen_dtcs: dict[str, int] = {}
+        self._observations = 0
+        for row in self.journal.records():
+            body = row["body"]
+            if body.get("schema") == "bean.rider.obd.scan.v1":
+                self._observations += 1
+                for code in {pair[0] for pair in body.get("dtcs", [])}:
+                    self._seen_dtcs[code] = self._seen_dtcs.get(code, 0) + 1
 
     def observe(self, reader: Reader, *, timestamp: str | None = None):
         result = scan(reader, timestamp=timestamp).payload()
-        events = self.journal.records()
         dtcs = {code for code, _ in result["dtcs"]}
-        previous = [x["body"] for x in events if x["body"].get("schema") == "bean.rider.obd.scan.v1"]
         warnings = []
         for code in sorted(dtcs):
-            count = sum(any(dtc[0] == code for dtc in record.get("dtcs", ())) for record in previous)
+            count = self._seen_dtcs.get(code, 0)
             warnings.append({"code": code, "repeat_observations": count+1,
                              "priority": "persistent" if count >= 2 else "new_or_recurrent",
                              "recommendation": "read_service_diagnostics_before_tuning"})
         seal = self.journal.append(result)
-        return BrainReport(result, tuple(warnings), seal, len(previous)+1)
+        self._observations += 1
+        for code in dtcs:
+            self._seen_dtcs[code] = self._seen_dtcs.get(code, 0) + 1
+        return BrainReport(result, tuple(warnings), seal, self._observations)
 
     def review_injector(self, trial: CylinderTrial):
         result = review(trial)

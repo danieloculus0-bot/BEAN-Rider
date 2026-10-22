@@ -1,6 +1,6 @@
 # BEAN-Rider
 
-**Automotive intelligence laboratory | v0.2: engine-agnostic research workbench**
+**Automotive intelligence laboratory | v0.3: wired OBD-II live cockpit research**
 
 BEAN-Rider is a standalone experimental companion to [BEAN Core](https://github.com/danieloculus0-bot/BEAN), initially motivated by a custom 2012 Maserati GranTurismo 4.7L twin-turbo concept. It is not an ECU firmware project, a validated vehicle tune, or a live automotive controller.
 
@@ -29,6 +29,25 @@ python -m bean_rider inspect-csv examples/example_telemetry.csv
 
 The demo emits a JSON report and `bean_bridge_event`. The compressed report and manifest are created at the specified output path, which is gitignored by default. `inspect-csv` only parses caller-provided records. The bundled example is **fabricated sample data**.
 
+
+## v0.3 Wired OBD-II live dashboard and engine priority catalog
+
+This version adds an **actual local HTTP dashboard** fed by the existing Python-OBD **USB/serial** reader. Live values, DTCs, bounded RPM history and durable local SQLite observation history are displayed in a mobile-friendly page. It does not require Bluetooth, cloud services, a phone app or external network access.
+
+```bash
+python -m unittest discover -s tests -v
+python -m bean_rider engine-families
+python -m bean_rider live --simulate --engine gm-ls --http-port 8765
+# Open http://127.0.0.1:8765 in a browser (synthetic values)
+
+python -m pip install '.[obd]'
+python -m bean_rider live --port COM4 --engine gm-ls --db evidence/ls-logger.sqlite
+# Linux: replace COM4 with /dev/ttyUSB0 or the actual adapter path
+```
+
+The engine catalog prioritizes GM LS and LT, followed by Maserati F136, VW, Mercedes, Audi, BMW and Ferrari, with **explicitly unimplemented factory ECU mapping** for each. Engine identification is selected by the user, not inferred from an unverified OBD response. Generic OBD-II provides a **vehicle-specific subset** of emission diagnostics, RPM, speed, temperature, pressure, throttle and fuel trims. It does **not** provide unrestricted ECU fuel/ignition table access, accurate knock data, injector flow, or all manufacturer sensors. Physical engine optimization/auto-tuning remains unimplemented; the earlier thermal simulator and offline map editor are separate building blocks. The existing scanner may take longer than the requested interval because a slow adapter requires serial command round-trips.
+
+The dashboard listens on loopback (`127.0.0.1`) rather than exposing vehicle telemetry to the LAN. Running the program and an OBD-II cable on an onboard computer is not itself a validated vehicle installation. A truly permanent plugged-in unit needs ignition-aware power control and an independent electrical low-voltage cutoff, because diagnostic port pin 16 may remain powered when the car is parked. Do not leave a permanently awake laptop or USB adapter draining the battery. The live logger cannot flash, tune, or actuate the ECU.
 
 ## v0.2 Engine brain, scanners, maps and learning (October 2026)
 
