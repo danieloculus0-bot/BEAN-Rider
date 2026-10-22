@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bean-rider"
+version = "0.1.0"
+description = "BEAN Automotive offline thermal-management and evidence research"
+requires-python = ">=3.10"
+license = {text = "Proprietary - license not granted"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["bean_rider*"]

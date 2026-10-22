@@ -1,0 +1,28 @@
+name: BEAN-Rider offline verification
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-verification:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ['3.10', '3.12']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile
+        run: python -m compileall -q bean_rider tests
+      - name: Run independent unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Run offline simulation
+        run: python -m bean_rider demo --output evidence/rider --steps 120
+      - name: Verify compressed evidence recovery
+        run: python -m bean_rider verify evidence/rider
