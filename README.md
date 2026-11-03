@@ -1,176 +1,151 @@
 # BEAN-Rider
 
-**Automotive intelligence laboratory | v0.4: Jetson cockpit and wired OBD-II**
+**Onboard automotive tuner, OBD-II scanner, and engine-monitoring cockpit**
 
-BEAN-Rider is a standalone experimental companion to [BEAN Core](https://github.com/danieloculus0-bot/BEAN), initially motivated by a custom 2012 Maserati GranTurismo 4.7L twin-turbo concept. It is not an ECU firmware project, a validated vehicle tune, or a live automotive controller.
+BEAN-Rider is an automotive diagnostics and tuning platform designed to live **inside a vehicle**, not a project for modifying one particular car. Its goal is to bring fault-code scanning, live engine telemetry, drive logging, calibration-map work, and evidence-based tuning analysis into one persistent onboard computer with a touchscreen.
 
-The hardware concept is unusual on purpose: **two top-mounted intake fans, complementary trailing exhaust fans, tapered ducts with low-side hot-air discharge, independent liquid circuits, and twin Peltier modules**. The goal is to characterize pressure, heat rejection, coolant loads and control strategies before fabricating the hardware.
+The intended installation uses an **NVIDIA Jetson** as the onboard computer, a **10-inch touchscreen**, and a **wired OBD-II diagnostic interface**. The software is designed around multiple engine/ECU profiles, with GM LS/LT families first in the development queue. Vehicle-specific access depends on the actual ECU, protocol, adapter, model year, and available sensors.
 
-## Built in v0.1.0
+**Current implementation:** live read-only OBD-II scanning and dashboard, local diagnostic history, offline calibration tools, tuning experiments, and a head-unit application shell are in the repository. Vehicle-specific ECU calibration reading/writing, real-world tuning validation, and finished in-car installation are **still development work**, not delivered capabilities.
 
-- A deterministic **three-node lumped thermal model** (turbine, turbo coolant, illuminated display coolant) with explicit heat conservation, pressure-based push-pull fan airflow, radiator heat transfer, Peltier cooling plus electrical waste heat, and exhaust-air rise estimates.
-- Four independently commanded *virtual* actuator outputs: leading fans, trailing fans, circulation pump and Peltier duty.
-- An offline **81-candidate parameter search** using a training scenario and a different, untouched synthetic holdout drive cycle. Baseline metrics, selected metrics, energy penalty, and regressions are all retained.
-- A **compressed, checksum-verified evidence bundle**, with deterministic gzip formatting and round-trip verification. The bundle is a transport artifact, **not** a replacement for BEAN Core's SQLite Journal.
-- A structured **BEAN bridge event** with exact report digest and matched-scenario identification. Integration hooks are a data contract; BEAN Core does **not** ingest them automatically yet.
-- **Read-only CSV telemetry ingestion** with explicit units, numeric validation and summary statistics. No ECU writes, CAN actuation or diagnostic assertions.
-- Offline unit tests and Windows/Linux CI checks.
+## What BEAN-Rider is for
 
-### Run it
+1. **Scan and diagnose:** Read supported OBD-II parameters and diagnostic trouble codes (DTCs), identify unavailable PIDs, and retain recurring fault observations.
+2. **Monitor while driving:** Present RPM, speed, coolant and intake temperature, manifold pressure, load, throttle, and available fuel trims on a local touchscreen dashboard.
+3. **Log and compare:** Keep local SQLite observation history and hash-chained evidence. Import externally logged CSV telemetry and compare matched baseline/candidate tuning experiments.
+4. **Work with tunes and calibration maps:** Inspect compatible TunerStudio `.msq` files, extract explicitly identified 2D tables, edit versioned JSON grids offline, and compare revisions without overwriting source maps.
+5. **Build a permanent cockpit:** Integrate the Jetson, display, diagnostic cable, ignition-aware power hardware, and later compatible phone-projection receivers in a self-contained head unit.
+6. **Evolve toward ECU-specific tuning:** Add validated ECU/profile interfaces, measured feedback, controlled changes, and verification procedures as those components are implemented and tested.
 
-Requires Python 3.10+ and **only the standard library** at runtime. From repository root:
+This is an **engine-management diagnostic and tuning workbench**, with a path toward an integrated onboard tuner. Its thermal simulation code is one optional research tool, not the purpose of the product.
+
+## Implemented software, at a glance
+
+| Area | What exists in this repository | Current boundary |
+| --- | --- | --- |
+| Diagnostic scanner | Wired serial/USB ELM327-compatible OBD-II reader through optional `python-OBD`; supported live PIDs and DTC scans | Read-only generic OBD-II; actual PID availability varies by vehicle |
+| Onboard dashboard | Local browser cockpit with live values, RPM history, error/warning states and persistent sessions | HTTP bound to loopback; not a completed automotive hardware installation |
+| Logging and fault history | SQLite event journal, repeated-DTC tracking, checksum/hash-chain verification | Vehicle and sensor provenance are not automatically authenticated |
+| Calibration workbench | JSON calibration grids, interpolation, single-cell edits, map diff, `.msq` inspection/extraction | Offline editing; no ECU flashing or live map writes |
+| Tuning evaluation | Matched baseline/candidate scoring, injector-trial review, evidence receipts and scoreboard | Uses supplied/simulated evidence; not a closed-loop auto-tuner |
+| Engine profiles | LS/LT-first catalog and extensible engine-family metadata | Entries are a development queue, not confirmed OEM ECU compatibility |
+| Touchscreen/head unit | 10-inch Jetson layout target, CarPlay/Android Auto tiles, optional launch handoff | Real phone projection requires separate compatible receivers |
+| Supporting engineering | Power/sleep recommendations, thermal/airflow simulator and telemetry importer | Power shutdown needs hardware; simulation is not a measured tune |
+
+**No factory ECU write, flash, boost actuation, or autonomous fuel/ignition control is implemented in the current source.** That limitation describes development status, not the intended purpose of BEAN-Rider.
+
+## Quick start
+
+Requires **Python 3.10+**. Core offline commands use the standard library; connecting to an ELM327-compatible serial adapter uses the optional `python-OBD` dependency.
+
+From the repository root:
 
 ```bash
 python -m unittest discover -s tests -v
-python -m bean_rider demo --output evidence/rider --steps 300
-python -m bean_rider verify evidence/rider
+
+# Inspect configured engine-family priorities
+python -m bean_rider engine-families
+
+# Start the onboard dashboard with simulated data, no vehicle needed
+python -m bean_rider live --simulate --engine gm-ls --http-port 8765
+```
+
+Open **http://127.0.0.1:8765** on the computer running BEAN-Rider. Simulation produces fabricated values and is intended for interface testing.
+
+### Connect the OBD-II scanner
+
+```bash
+python -m pip install '.[obd]'
+
+# Linux / Jetson example: select the actual serial device for your adapter
+python -m bean_rider live --port /dev/ttyUSB0 --engine gm-ls --db evidence/rider-live.sqlite
+
+# Windows example: one diagnostic scan with local fault/reading history
+python -m bean_rider scan-obd --port COM4 --samples 1 --db evidence/rider-brain.sqlite
+
+# Repeated scanning until interrupted
+python -m bean_rider scan-obd --port COM4 --samples 0 --interval 5
+```
+
+Replace `/dev/ttyUSB0` or `COM4` with the detected port. The adapter must be an **active, compatible OBD-II interface**, not a passive connector cable. The program does not auto-detect a vehicle's ECU calibration protocol. OBD-II polling speed depends on the vehicle and interface.
+
+### Work with tuning maps and evidence
+
+```bash
+# Inspect a compatible, locally supplied TunerStudio project
+python -m bean_rider inspect-msq path/to/tune.msq
+
+# Edit a copy of a sample map offline, retaining the source
+python -m bean_rider edit-map examples/example_map.json evidence/edited_map.json --x 1 --y 0 --value 51
+python -m bean_rider compare-maps examples/example_map.json evidence/edited_map.json
+
+# Review an example injector response and local evidence history
+python -m bean_rider review-injector examples/example_injector_trial.json
+python -m bean_rider scoreboard evidence/rider-brain.sqlite
+python -m bean_rider verify-journal evidence/rider-brain.sqlite
+
+# Summarize externally collected telemetry
 python -m bean_rider inspect-csv examples/example_telemetry.csv
 ```
 
-The demo emits a JSON report and `bean_bridge_event`. The compressed report and manifest are created at the specified output path, which is gitignored by default. `inspect-csv` only parses caller-provided records. The bundled example is **fabricated sample data**.
+For 2D map extraction, use `python -m bean_rider extract-msq --help`. Specify the actual table, axis variable names, units, profile and ECU family from the corresponding firmware definition; BEAN-Rider will not guess those properties. An `.msq` file is not automatically compatible with a different ECU.
 
+### Other available commands
 
-## v0.4 Jetson 10-inch standard cockpit and phone projection contract
+- `python -m bean_rider projection-status`: check cockpit app and receiver readiness.
+- `python -m bean_rider ecosystems`: list external configuration-format references.
+- `python -m bean_rider power-plan --ignition off --voltage 12.4 --off-seconds 150`: preview parked-power recommendations.
+- `python -m bean_rider demo --output evidence/rider --steps 300`: run an **optional synthetic thermal-control experiment**.
+- `python -m bean_rider verify evidence/rider`: validate the resulting evidence bundle.
 
-**Apple CarPlay and Android Auto are standard built-in cockpit applications** (always visible, not optional feature unlocks) alongside the engine dashboard. BEAN-Rider supplies the fullscreen touchscreen navigation, receiver readiness API, and local executable handoff for either service. **The actual phone projection video, audio transport, pairing protocol, licensing, and touch input forwarding require a separate compatible receiver/software-hardware stack that is NOT supplied or emulated by this repository.** An unconfigured receiver is prominently shown as unavailable, not falsely as working. Stereo integration is a later adapter; the Jetson itself is the cockpit computer.
+All bundled examples are synthetic. No real vehicle dataset or tune is shipped.
 
-An NVIDIA Jetson Orin Nano dev kit can use its USB Type-A host port for a **wired ELM327-compatible 16-pin OBD-II-to-USB interface**. The factory screen connection on that dev kit is **DisplayPort** (use DisplayPort-to-HDMI for an HDMI display); a typical touch monitor requires a second USB connection for touchscreen input. Select a Linux-compatible serial interface and confirm the actual `/dev/ttyUSB*` or `/dev/ttyACM*` port. The app never assumes hardware is installed merely because a menu item exists.
+## Onboard hardware architecture
 
-```bash
-python -m bean_rider projection-status
-python -m bean_rider live --simulate --engine gm-ls
-# On an installed Jetson with a compatible OBD cable:
-python -m bean_rider live --port /dev/ttyUSB0 --engine gm-ls
-# Open http://127.0.0.1:8765 in kiosk/fullscreen browser on the 10-inch screen.
+```text
+Vehicle ECU + supported sensors
+        |
+  OBD-II diagnostic port
+        |
+ Active USB/serial adapter
+        |
+  Jetson onboard computer
+        |-- Local BEAN-Rider scanner and telemetry journal
+        |-- Calibration-map / tuning analysis workbench
+        |-- Local browser cockpit on 10-inch touchscreen
+        |-- Optional external CarPlay / Android Auto receiver software
+        |
+ Automotive-rated fused power supply + ignition-aware shutdown
 ```
 
-To connect **already-installed compatible receiver executables**, a local administrator may write an untracked configuration file (e.g. `evidence/receiver.json`):
+A printable prototype mount is in [`hardware/jetson_head_unit/`](hardware/jetson_head_unit/README.md), with OpenSCAD parts for a Jetson tray, screen-housing tabs and cable anchors. This is a test-fit design, not a vehicle-certified mount.
 
-```json
-{
-  "schema": "bean.rider.receiver.config.v1",
-  "receivers": {
-    "carplay": {"executable": "/absolute/path/to/compatible/carplay-receiver", "args": []},
-    "android_auto": {"executable": "/absolute/path/to/compatible/android-auto-receiver", "args": []}
-  }
-}
-```
+For the Jetson Orin Nano developer kit, plan for **DisplayPort video** (or a suitable converter), USB touchscreen input, USB diagnostic adapter, and correctly regulated onboard power. **Do not power the Jetson from OBD port pin 16.** A permanently installed unit needs fused automotive power conditioning, proper shutdown, and a real independent battery undervoltage disconnect. The `power-plan` function is advisory and cannot cut power itself.
 
-Then start `python -m bean_rider live --simulate --projection-config evidence/receiver.json`. Pressing the standard app tile directly launches its configured receiver as a separate local process without a shell. Startup does **not** establish actual phone pairing, projection compatibility, MFi approval, or verified operation. No cloud/screen broadcasting endpoints are added. The local app-launch HTTP route checks the cockpit request origin and a custom header. Keep private receiver configuration and vehicle logs out of GitHub.
+Apple CarPlay and Android Auto are intended standard cockpit applications. The current code provides visible tiles and handoff to **separately installed receiver executables** via an optional local configuration, but does not implement licensed phone projection, pairing, or touch/video transport. See `bean_rider/headunit.py` for the configuration contract.
 
-Official references: [NVIDIA Orin Nano developer-kit port layout](https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/hardware_layout.html), [Python-OBD and ELM327](https://python-obd.readthedocs.io/en/latest/), and [Apple MFi/CarPlay](https://mfi.apple.com/en/how-it-works).
+## Project organization
 
-## v0.3 Wired OBD-II live dashboard and engine priority catalog
+| Path | Responsibility |
+| --- | --- |
+| `bean_rider/obd.py`, `live.py` | Diagnostic queries, local telemetry dashboard |
+| `bean_rider/brain.py`, `journal.py` | Observations, persistent fault history, evidence integrity |
+| `bean_rider/calibration.py`, `profiles.py` | Offline calibration files and ECU-profile references |
+| `bean_rider/learning.py`, `injectors.py` | Tuning comparison evidence and injector-trial review |
+| `bean_rider/engine_catalog.py` | Engine-family development queue |
+| `bean_rider/headunit.py`, `power.py` | Cockpit receiver handoff and parked-power policy |
+| `bean_rider/telemetry.py`, `experiment.py`, `thermal.py` | CSV analysis and optional simulation |
+| `hardware/jetson_head_unit/` | Parametric prototype mounting kit |
+| `tests/` | Offline automated unit tests |
 
-This version adds an **actual local HTTP dashboard** fed by the existing Python-OBD **USB/serial** reader. Live values, DTCs, bounded RPM history and durable local SQLite observation history are displayed in a mobile-friendly page. It does not require Bluetooth, cloud services, a phone app or external network access.
+## Development priorities
 
-```bash
-python -m unittest discover -s tests -v
-python -m bean_rider engine-families
-python -m bean_rider live --simulate --engine gm-ls --http-port 8765
-# Open http://127.0.0.1:8765 in a browser (synthetic values)
+1. Test the wired diagnostic path on identified real vehicles and adapters, recording supported/unsupported PIDs and reliable sampling performance.
+2. Make the touch-first cockpit practical for an always-installed device: readable gauges, startup/reconnect behavior, fault-history review, and robust storage.
+3. Add ECU-specific diagnostic and calibration adapters backed by explicit protocol definitions, verification, and real instrumentation.
+4. Connect logged operating conditions to versioned calibration decisions, matched comparisons, and reversible review procedures.
+5. Validate power, thermal conditions, physical mounting, and end-to-end behavior before treating the head unit as ready for vehicle deployment.
 
-python -m pip install '.[obd]'
-python -m bean_rider live --port COM4 --engine gm-ls --db evidence/ls-logger.sqlite
-# Linux: replace COM4 with /dev/ttyUSB0 or the actual adapter path
-```
+**Scope:** This repository is the BEAN-Rider automotive platform. It is not tied to a specific car, forced-induction conversion, or one-off fabrication exercise. Future tuning capabilities must be implemented and validated rather than assumed from generic OBD-II access.
 
-The engine catalog prioritizes GM LS and LT, followed by Maserati F136, VW, Mercedes, Audi, BMW and Ferrari, with **explicitly unimplemented factory ECU mapping** for each. Engine identification is selected by the user, not inferred from an unverified OBD response. Generic OBD-II provides a **vehicle-specific subset** of emission diagnostics, RPM, speed, temperature, pressure, throttle and fuel trims. It does **not** provide unrestricted ECU fuel/ignition table access, accurate knock data, injector flow, or all manufacturer sensors. Physical engine optimization/auto-tuning remains unimplemented; the earlier thermal simulator and offline map editor are separate building blocks. The existing scanner may take longer than the requested interval because a slow adapter requires serial command round-trips.
-
-The dashboard listens on loopback (`127.0.0.1`) rather than exposing vehicle telemetry to the LAN. Running the program and an OBD-II cable on an onboard computer is not itself a validated vehicle installation. A truly permanent plugged-in unit needs ignition-aware power control and an independent electrical low-voltage cutoff, because diagnostic port pin 16 may remain powered when the car is parked. Do not leave a permanently awake laptop or USB adapter draining the battery. The live logger cannot flash, tune, or actuate the ECU.
-
-## v0.2 Engine brain, scanners, maps and learning (October 2026)
-
-The **platform is engine-agnostic by explicit engine and ECU profiles**, not universal ECU access. This release adds actual software modules and independent tests:
-
-- `bean_rider.obd`: **read-only** ELM327/OBD-II polling (optional `python-OBD` package), supported generic live PIDs, fault-code scanning, optional persistent observations. The standard OBD-II interface cannot read or write arbitrary ignition/injection ECU maps or single-cylinder trims. Missing PIDs remain explicitly unknown.
-- `bean_rider.brain` + `bean_rider.journal`: continuous operation with SQLite-backed, hash-chained append-only observations, repeat-fault memory, restart/replay verification and gzip export. The ledger is private/local by default.
-- `bean_rider.calibration`: original versioned JSON calibration grid, dimensional checks, interpolation, explicit offline cell edits, diff, and read-only XML `.msq` inspection/extraction for compatible TunerStudio projects. ECU-specific axis names, units and orientation must be supplied rather than guessed. **No flashing.**
-- `bean_rider.profiles`: basic engine-agnostic profiles and versioned references to Speeduino and rusEFI configuration ecosystems. Compatibility does **not** imply copying community tunes or using them on unrelated engines.
-- `bean_rider.injectors`: evidence-based cylinder-specific **simulated compensation review** with failure/worsening detection and more frequent warnings. Physical injector leakage is not assumed fixable by tuning, and generic OBD cannot identify individual injector flow. No live injector compensation or control is installed.
-- `bean_rider.learning`: baseline/candidate matched comparison, signed outcome rewards, durable ledger scoreboard, duplicate receipt detection, and negative outcome retention. It is *not* a connected BEAN SpongeTD learner or actual vehicle auto-tuning yet.
-- `bean_rider.power`: park/sleep **advisory policy**; a compatible power controller must implement real low-voltage cutoff and sleep behavior. A permanently attached OBD dongle may have continuous battery power, even when the ignition is off.
-
-### CLI workbench
-
-```bash
-python -m unittest discover -s tests -v
-python -m bean_rider scan-obd --simulate --db evidence/rider-brain.sqlite
-# Optional serial ELM327 OBD-II hardware (pip install python-OBD):
-python -m bean_rider scan-obd --port COM4 --db evidence/rider-brain.sqlite --samples 0 --interval 5
-python -m bean_rider verify-journal evidence/rider-brain.sqlite
-python -m bean_rider inspect-msq path/to/your_tune.msq
-python -m bean_rider edit-map examples/example_map.json evidence/edited_map.json --x 1 --y 0 --value 51
-python -m bean_rider compare-maps examples/example_map.json evidence/edited_map.json
-python -m bean_rider review-injector examples/example_injector_trial.json --db evidence/rider-brain.sqlite
-python -m bean_rider scoreboard evidence/rider-brain.sqlite
-python -m bean_rider power-plan --ignition off --voltage 12.4 --off-seconds 150
-python -m bean_rider ecosystems
-```
-
-For a complete MSQ 2D map extraction use `extract-msq` with explicit `--table`,
-`--x-variable`, `--y-variable`, `--profile`, `--ecu-family`, `--x-unit`,
-`--y-unit`, `--value-unit`, and `--output`. Check the official firmware-specific
-`.ini` to identify table names, units and row ordering.
-
-### Open-source configuration references
-
-- [Speeduino reference .ini](https://github.com/speeduino/speeduino/blob/master/reference/speeduino.ini) and [Speeduino Tunes](https://github.com/speeduino/Tunes). Speeduino's tune library identifies a **CC BY-NC 4.0** license; no sample tune is vendored here. Firmware signatures and engine/hardware compatibility matter.
-- [rusEFI firmware and console](https://github.com/rusefi/rusefi), [public tune/log catalog](https://wiki.rusefi.com/Online/). Its core has GPLv3 and additional conditions; no code is copied or linked into this repository.
-- Users must verify individual third-party permissions, compatibility, emissions requirements and licensing before using or modifying ECU firmware or tunes.
-
-### Permanent installation concept
-
-Connect a certified/appropriate OBD-II adapter, local computing unit, and **independent switched/low-voltage-disconnect power management**. Use ignition sensing, onboard storage, reconnect-after-start, sensible polling frequencies and a known wake/sleep strategy. The software's `power-plan` command does not physically switch power. Bluetooth dongles and pin-16-powered accessories can drain the parked battery.
-
-Do not upload private VINs, complete GPS/location traces, owner details or unredacted trip logs to the public repo. No automatic public telemetry exports exist.
-
-### Implementation boundaries
-
-This version **does not** reflash factory ECUs, set boost/fuel/ignition tables in a running engine, remotely command actuators, confirm injector mechanical conditions, or claim universal support for every OEM ECU. Live test data, real injector-trim sensors, hardware clocks, an installer, GUI, and BEAN Core reward-loop ingestion remain future work. The first on-vehicle stage is a read-only logger; calibration changes require a separately validated ECU-specific adapter and proper instrumentation.
-
-## Model boundaries and engineering notes
-
-These are **illustrative lumped parameters**, not measured values or validated thresholds from Maserati, Ferrari, LOJ, Garrett or Peltier manufacturers. The thermal model does not include turbo oil coking, exhaust gas turbine efficiency, vehicle-underhood pressure maps, radiator fan curves, actual pump curves, cavitation, control latency, thermal cycling damage, injector behavior, fuel maps, boost actuation or knock consequences. The exhaust-temperature estimate is a simplified bulk energy calculation, not a prediction of component skin temperatures.
-
-A push-pull arrangement increases **available pressure**, but pressure/flow gains depend on actual fan curves and system resistance. The fans do not remove resistance. Peltier hot-side rejection equals extracted cold-side heat **plus electrical input**; active cooling cannot avoid paying that heat and electricity bill. Conventional radiators will generally dominate bulk heat rejection. Ordinary PC cooling hardline is **not** assumed suitable for turbo coolant temperatures; isolating an aesthetic loop doesn't make high-temp components safe.
-
-The current optimizer is **deterministic grid search**, not BEAN's experimental Q-learning. It changes virtual duty response parameters only. A training improvement may fail to transfer to holdout; the separate holdout result is reported even when negative. Neither result establishes real-vehicle efficiency gains.
-
-## Telemetry input schema
-
-A CSV must have the following columns with these exact units:
-
-| Field | Units | Meaning |
-|---|---|---|
-| `time_s` | s | Monotonic sample time |
-| `rpm` | rev/min | Engine speed |
-| `speed_kph` | km/h | Vehicle speed |
-| `coolant_c` | °C | Reported engine coolant temperature |
-| `oil_c` | °C | Reported oil temperature |
-| `intake_c` | °C | Reported intake air temperature |
-| `manifold_kpa` | kPa absolute | Manifold absolute pressure |
-| `lambda_measured` | lambda | Reported equivalence relative to stoichiometric |
-| `knock_retard_deg` | degrees | Reported ignition retard associated with knock |
-
-Column meaning must be verified against the source logger; merely naming a column doesn't authenticate a sensor. This phase intentionally omits VIN, GPS, and personal location.
-
-## BEAN integration path
-
-BEAN Core currently has a [hash-chained SQLite Journal](https://github.com/danieloculus0-bot/BEAN/blob/main/bean/optimization/autodev.py) and separate experimental [SpongeTD](https://github.com/danieloculus0-bot/BEAN/blob/experiment/bean-sponge-core-20261011/bean/optimization/sponge_td.py) and [scoreboard/reward](https://github.com/danieloculus0-bot/BEAN/blob/experiment/bean-visible-scoreboard-reward-20261020/bean/optimization/scoreboard_context.py) work. Do not conflate the branches.
-
-1. Use `bean_rider.bridge.bean_event(report)` to produce a versioned observation with report hash, evidence type and matched baseline/holdout comparison.
-2. A future host-owned BEAN Bridge worker can verify the compressed artifact and append its reference to Core's **existing Journal**. This adapter is not yet live.
-3. A separately tested worker may expose these matched simulation observations to SpongeTD for offline policy experiments, with explicit verified reward receipts and frozen holdout data. It must not call the current grid search "Q-learning".
-4. Later, introduce measured radiator/fan/pump curves, an instrumented dyno, real thermal sensor data and a read-only OBD/CAN collector with documented controller interface. Keep any safety-critical ECU actuation outside learned closed-loop recommendations unless separately engineered and validated.
-
-**Known status:** no BEAN agent is controlling vehicle hardware. No Maserati calibration, installation or live tune has been performed. Read the CI run for the exact commit before stating verification status.
-
-## Development
-
-This repository currently has no general redistribution license. Source visibility alone does not confer rights to reuse. Contributions should preserve evidence and label the scope of claims.
-
-
-## Printable Jetson 10-inch cockpit hardware
-
-A parametric 3D-printable **Jetson Orin Nano head-unit mounting fixture** and versioned hardware profile are in [`hardware/jetson_head_unit/`](hardware/jetson_head_unit/README.md). Includes ventilated 160 x 126 mm tray, slotted 10-inch display-housing tabs and USB/OBD cable anchors. Test-fit prototypes only: no screen housing or vehicle fascia dimensions are assumed. Wired OBD-II requires an **active** J1962-to-USB ELM327/STN diagnostic adapter; independent fused ignition-aware Jetson power is required. Android Auto and CarPlay remain standard cockpit requirements but physical receiver compatibility is not yet validated.
+Keep VINs, identifying trip logs, and private vehicle records local. The project is public but currently grants no general redistribution license.
