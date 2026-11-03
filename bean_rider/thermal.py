@@ -1,7 +1,7 @@
 """Deterministic lumped-parameter *research* simulator, not a vehicle calibration.
 
 Every heat term is in watts. Node capacitances are in joules per kelvin.
-Numbers are deliberately declared assumptions, not Maserati measurements.
+Numbers are deliberately declared assumptions, not measurements from any particular vehicle.
 """
 from __future__ import annotations
 
