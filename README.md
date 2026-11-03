@@ -34,6 +34,20 @@ This is an **engine-management diagnostic and tuning workbench**, with a path to
 
 **No factory ECU write, flash, boost actuation, or autonomous fuel/ignition control is implemented in the current source.** That limitation describes development status, not the intended purpose of BEAN-Rider.
 
+## Diagnostic evidence report (first intelligence milestone)
+
+BEAN-Rider now has a **diagnostic case summary** command over its existing, checksum-verified SQLite journal. It reports each recorded trouble code's first/last observation, repeat count, latest-scan presence, and associated RPM/load/temperature/fuel-trim observations. It also summarizes supported PID availability and minimum/maximum/average values, retaining missing-data gaps instead of converting them to zero.
+
+```bash
+# First create observations by scanning or using the simulated reader.
+python -m bean_rider scan-obd --simulate --samples 3 --db evidence/test-diagnostics.sqlite
+
+# Analyze the recorded evidence, entirely offline.
+python -m bean_rider diagnose --db evidence/test-diagnostics.sqlite
+```
+
+The resulting JSON is **evidence for investigation**, not a guessed root cause or repair verification. A DTC disappearing from one scan does not prove it was repaired; some adapters simply cannot query that DTC. No DTC clearing, flashing, actuator test, VIN harvesting, or ECU write is performed. This is the first building block for condition-matched before/after repair analysis and guided diagnostic workflows.
+
 ## Quick start
 
 Requires **Python 3.10+**. Core offline commands use the standard library; connecting to an ELM327-compatible serial adapter uses the optional `python-OBD` dependency.
