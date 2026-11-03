@@ -1,8 +1,8 @@
 # BEAN-Rider engineering notes
 
-BEAN-Rider is a separate **offline automotive research adapter**, not an ECU controller. For cross-repo BEAN work, read the BEAN Core AI activity gatekeeper at `danieloculus0-bot/BEAN/docs/AI_GATEKEEPER.md` and check present Core/Bridge branches before claiming features.
+BEAN-Rider is an **onboard automotive tuning and diagnostic scanner platform**: a Jetson-based cockpit with wired OBD-II telemetry, fault-code scanning, persistent observations, and an offline calibration/tuning workbench. Its intended purpose is not a particular vehicle conversion or thermal experiment. Its currently implemented vehicle interface is **read-only**, and ECU-specific map reads/writes, physical tuning control, and in-car hardware validation remain to be developed. For cross-repo BEAN work, read the BEAN Core AI activity gatekeeper at `danieloculus0-bot/BEAN/docs/AI_GATEKEEPER.md` and check present Core/Bridge branches before claiming features.
 
-- Keep dimensional units and model assumptions explicit; never claim unmeasured Maserati data.
+- Keep dimensional units and model assumptions explicit; never claim unmeasured or unverified vehicle-specific data.
 - Use deterministic matched baseline and holdout comparisons; keep negative outcomes.
 - Preserve measured versus synthetic provenance in every export.
 - Do not imply BEAN SpongeTD/DeepQ is running when only a deterministic grid search is used.
