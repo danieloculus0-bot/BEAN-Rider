@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "bean-rider"
 version = "0.3.0"
-description = "BEAN-Rider automotive engine intelligence, read-only OBD and calibration workbench"
+description = "Onboard automotive diagnostics, OBD-II scanner, tuning workbench and Jetson cockpit"
 requires-python = ">=3.10"
 license = {text = "Proprietary - license not granted"}
 
