@@ -53,17 +53,12 @@ def decode_mode01(payload: bytes, pid: int) -> dict:
             "ecu_writes": 0}
 
 
-def decode_mode03(payload: bytes) -> dict:
-    """Decode a single reassembled SAE J1979 Mode 03 stored-DTC response.
-
-    Input starts at the application-layer 0x43 byte, not an ELM327 text line
-    or ISO-TP/CAN frame. Multi-ECU aggregation belongs to the adapter.
-    All-zero trailing DTC slots are padding, not actual faults.
-    """
+def _decode_dtc_response(payload: bytes, response_byte: int, mode: str) -> dict:
+    """Decode one reassembled J1979 DTC response, without transport framing."""
     if not isinstance(payload, bytes):
         raise TypeError("payload must be raw application bytes")
-    if not payload or payload[0] != 0x43 or (len(payload) - 1) % 2:
-        raise ValueError("Invalid Mode 03 response or DTC pair length")
+    if not payload or payload[0] != response_byte or (len(payload) - 1) % 2:
+        raise ValueError(f"Invalid Mode {mode} response or DTC pair length")
     codes = []
     seen_padding = False
     classes = "PCBU"
@@ -77,5 +72,20 @@ def decode_mode03(payload: bytes) -> dict:
         code = (f"{classes[high >> 6]}{(high >> 4) & 3}"
                 f"{high & 15:X}{low >> 4:X}{low & 15:X}")
         codes.append(code)
-    return {"mode": "03", "dtcs": codes,
-            "source": "raw_obd_mode03_unverified", "ecu_writes": 0}
+    return {"mode": mode, "dtcs": codes,
+            "source": f"raw_obd_mode{mode}_unverified", "ecu_writes": 0}
+
+
+def decode_mode03(payload: bytes) -> dict:
+    """Decode stored DTCs (0x43); no ECU commands are sent."""
+    return _decode_dtc_response(payload, 0x43, "03")
+
+
+def decode_mode07(payload: bytes) -> dict:
+    """Decode pending DTCs (0x47), distinct from stored faults."""
+    return _decode_dtc_response(payload, 0x47, "07")
+
+
+def decode_mode0a(payload: bytes) -> dict:
+    """Decode permanent DTCs (0x4A), which are not clearable by this API."""
+    return _decode_dtc_response(payload, 0x4A, "0A")
