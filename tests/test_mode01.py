@@ -1,6 +1,6 @@
 """Offline protocol vectors, never connected to a vehicle."""
 import unittest
-from bean_rider.mode01 import decode_mode01, decode_mode03
+from bean_rider.mode01 import decode_mode01, decode_mode03, decode_mode07, decode_mode0a
 
 
 class Mode01Tests(unittest.TestCase):
@@ -54,6 +54,28 @@ class Mode03Tests(unittest.TestCase):
                     decode_mode03(payload)
         with self.assertRaises(TypeError):
             decode_mode03("43 01 33")
+
+
+    def test_pending_and_permanent_dtc_classes(self):
+        pending = decode_mode07(bytes.fromhex("47 01 33 C1 23 00 00"))
+        permanent = decode_mode0a(bytes.fromhex("4A 40 01 80 02"))
+        self.assertEqual(pending["mode"], "07")
+        self.assertEqual(pending["dtcs"], ["P0133", "U0123"])
+        self.assertEqual(permanent["mode"], "0A")
+        self.assertEqual(permanent["dtcs"], ["C0001", "B0002"])
+        self.assertEqual(pending["ecu_writes"], 0)
+        self.assertEqual(permanent["ecu_writes"], 0)
+
+    def test_pending_permanent_reject_malformed(self):
+        for decoder, positive in ((decode_mode07, "47"), (decode_mode0a, "4A")):
+            for payload in (b"", bytes.fromhex("7F 07 11"),
+                            bytes.fromhex(positive + " 01"),
+                            bytes.fromhex(positive + " 00 00 01 33")):
+                with self.subTest(decoder=decoder.__name__, payload=payload):
+                    with self.assertRaises(ValueError):
+                        decoder(payload)
+            with self.assertRaises(TypeError):
+                decoder(positive)
 
 
 if __name__ == "__main__":
