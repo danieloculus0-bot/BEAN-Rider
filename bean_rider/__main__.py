@@ -11,6 +11,7 @@ from .experiment import tune
 from .telemetry import read_csv, describe
 from .calibration import inspect_msq, load_msq_map, load_map_json, save_map_json, compare_maps
 from .obd import PythonOBDReader, FakeOBDReader
+from .mode02 import decode_mode02
 from .brain import RiderBrain
 from .injectors import CylinderTrial
 from .journal import EventJournal
@@ -71,6 +72,10 @@ def main() -> int:
     p = sub.add_parser("review-injector", help="evaluate evidence of injector calibration response")
     p.add_argument("trial", type=Path)
     p.add_argument("--db", type=Path, default=Path("evidence/rider-brain.sqlite"))
+    p = sub.add_parser("decode-freeze-frame", help="decode a reassembled Mode 02 hex response offline")
+    p.add_argument("response", help="hexadecimal Mode 02 application bytes, e.g. 420C001AF8")
+    p.add_argument("--pid", required=True, type=lambda x: int(x, 0), help="PID number, e.g. 0x0C")
+    p.add_argument("--frame", type=lambda x: int(x, 0), default=0, help="frame identifier (default 0)")
     p = sub.add_parser("scan-obd", help="one read-only scan, or continuous logged observations")
     p.add_argument("--port", help="ELM327 serial port, e.g. COM4, /dev/ttyUSB0")
     p.add_argument("--simulate", action="store_true", help="fabricated scan; no OBD connection")
@@ -152,6 +157,13 @@ def main() -> int:
         obj=decide(ignition=ign,supply_voltage=args.voltage,seconds_since_off=args.off_seconds)
         _output({"mode":obj.mode,"awake":obj.awake,"advisory":obj.advisory,
                  "physical_power_cutoff_present":False})
+    elif args.operation == "decode-freeze-frame":
+        try:
+            raw = bytes.fromhex(args.response)
+            result = decode_mode02(raw, args.pid, args.frame)
+        except (ValueError, TypeError) as exc:
+            parser.error(str(exc))
+        _output(result)
     elif args.operation == "scan-obd":
         if bool(args.port)==bool(args.simulate):
             parser.error("choose exactly one of --port or --simulate")
