@@ -18,7 +18,7 @@ def parse_elm_response(raw: bytes, pid: int, frame: int = 0) -> bytes:
     lines = [line.strip() for line in text.replace("\r", "\n").split("\n")]
     candidates = []
     for line in lines:
-        compact = re.sub(r"\\s+", "", line)
+        compact = re.sub(r"\s+", "", line)
         if not compact or compact in ("SEARCHING...", "OK") or compact.startswith("020"):
             continue
         if any(word in compact for word in ("NODATA", "ERROR", "STOPPED", "UNABLETOCONNECT", "BUSINIT")):
