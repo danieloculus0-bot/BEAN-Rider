@@ -12,6 +12,7 @@ from .telemetry import read_csv, describe
 from .calibration import inspect_msq, load_msq_map, load_map_json, save_map_json, compare_maps
 from .obd import PythonOBDReader, FakeOBDReader
 from .mode02 import decode_mode02
+from .freeze_frame import acquire_freeze_frame
 from .brain import RiderBrain
 from .injectors import CylinderTrial
 from .journal import EventJournal
@@ -76,6 +77,12 @@ def main() -> int:
     p.add_argument("response", help="hexadecimal Mode 02 application bytes, e.g. 420C001AF8")
     p.add_argument("--pid", required=True, type=lambda x: int(x, 0), help="PID number, e.g. 0x0C")
     p.add_argument("--frame", type=lambda x: int(x, 0), default=0, help="frame identifier (default 0)")
+    p = sub.add_parser("read-freeze-frame", help="read one Mode 02 PID via wired ELM327 serial adapter")
+    p.add_argument("--port", required=True, help="serial port, e.g. COM4 or /dev/ttyUSB0")
+    p.add_argument("--pid", required=True, type=lambda x: int(x, 0), help="supported PID, e.g. 0x0C")
+    p.add_argument("--frame", type=lambda x: int(x, 0), default=0)
+    p.add_argument("--baud", type=int, default=38400)
+    p.add_argument("--timeout", type=float, default=3.0)
     p = sub.add_parser("scan-obd", help="one read-only scan, or continuous logged observations")
     p.add_argument("--port", help="ELM327 serial port, e.g. COM4, /dev/ttyUSB0")
     p.add_argument("--simulate", action="store_true", help="fabricated scan; no OBD connection")
@@ -164,6 +171,20 @@ def main() -> int:
         except (ValueError, TypeError) as exc:
             parser.error(str(exc))
         _output(result)
+    elif args.operation == "read-freeze-frame":
+        if args.baud <= 0 or not 0 < args.timeout <= 30:
+            parser.error("baud must be positive and timeout must be between 0 and 30 seconds")
+        try:
+            import serial
+        except ImportError:
+            parser.error("pyserial required for wired freeze-frame acquisition")
+        try:
+            with serial.Serial(args.port, baudrate=args.baud, timeout=args.timeout,
+                               write_timeout=args.timeout) as link:
+                link.reset_input_buffer()
+                _output(acquire_freeze_frame(link, args.pid, args.frame))
+        except (ValueError, OSError, serial.SerialException) as exc:
+            parser.error(str(exc))
     elif args.operation == "scan-obd":
         if bool(args.port)==bool(args.simulate):
             parser.error("choose exactly one of --port or --simulate")
