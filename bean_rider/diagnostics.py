@@ -38,6 +38,13 @@ def summarize_diagnostics(records: list[dict]) -> dict:
              and isinstance(row.get("body"), dict)
              and row["body"].get("schema") == "bean.rider.obd.scan.v1"]
     total = len(scans)
+    # Legacy journal records lack a verified DTC query outcome.
+    statuses = [s.get("dtc_query_status", "unknown") for s in scans]
+    statuses = [x if x in ("queried", "unavailable", "not_requested")
+                else "unknown" for x in statuses]
+    status_counts = {name: statuses.count(name) for name in
+                     ("queried", "unavailable", "not_requested", "unknown")}
+    latest_status = statuses[-1] if total else "not_scanned"
     stats = {}
     for label, (command, unit) in PIDS.items():
         values = [s.get("values", {}).get(label) for s in scans
@@ -94,12 +101,21 @@ def summarize_diagnostics(records: list[dict]) -> dict:
         "first_scan_utc": scans[0].get("timestamp_utc") if total else None,
         "last_scan_utc": scans[-1].get("timestamp_utc") if total else None,
         "distinct_reported_dtcs": len(faults),
+        "dtc_query_status_latest": latest_status,
+        "dtc_query_status_counts": status_counts,
+        "latest_scan_confirmed_dtc_free": bool(total and latest_status == "queried"
+                                                and not scans[-1].get("dtcs")),
+        "latest_scan_dtc_conclusion": (
+            "unknown" if latest_status != "queried" else
+            "codes_reported" if scans[-1].get("dtcs") else "no_codes_reported"
+        ),
         "faults": ordered,
         "pids": stats,
         "data_provenance": "local_journal_records_not_sensor_authenticated",
         "limits": [
             "Only generic PIDs queried by BEAN-Rider are included.",
             "An absent DTC or PID does not prove a repaired component or healthy system.",
+            "Legacy DTC observations without query status remain Unknown.",
             "Occurrences count scans, not separate drive cycles or confirmed failures.",
             "Readings are not automatically matched for load, speed or temperature.",
             "No vehicle-specific tests, freeze frames or OEM service data are implied.",
