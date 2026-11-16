@@ -18,7 +18,9 @@ SUPPORTED = {
     0x0C: (2, "rpm", "revolutions_per_minute"),
     0x0D: (1, "speed_kph", "kilometer_per_hour"),
     0x0F: (1, "intake_c", "degC"),
+    0x10: (2, "mass_air_flow_gps", "gram_per_second"),
     0x11: (1, "throttle_pct", "percent"),
+    0x42: (2, "control_module_voltage_v", "volt"),
 }
 
 
@@ -38,6 +40,10 @@ def decode_mode01(payload: bytes, pid: int) -> dict:
     a = payload[2]
     if pid == 0x0C:
         value = (256 * a + payload[3]) / 4
+    elif pid == 0x10:
+        value = (256 * a + payload[3]) / 100
+    elif pid == 0x42:
+        value = (256 * a + payload[3]) / 1000
     elif pid in (0x05, 0x0F):
         value = a - 40
     elif pid in (0x06, 0x07):
