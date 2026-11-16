@@ -7,6 +7,18 @@ class Mode01Tests(unittest.TestCase):
     def test_rpm(self):
         self.assertEqual(decode_mode01(bytes.fromhex("41 0C 1A F8"), 12)["value"], 1726.0)
 
+    def test_mass_air_flow_and_module_voltage(self):
+        maf = decode_mode01(bytes.fromhex("41 10 01 F4"), 0x10)
+        self.assertEqual(maf["value"], 5.0)
+        self.assertEqual(maf["unit"], "gram_per_second")
+        voltage = decode_mode01(bytes.fromhex("41 42 30 39"), 0x42)
+        self.assertEqual(voltage["value"], 12.345)
+        self.assertEqual(voltage["unit"], "volt")
+        for pid, payload in ((0x10, bytes.fromhex("41 10 01")),
+                             (0x42, bytes.fromhex("41 42 30 39 00"))):
+            with self.assertRaises(ValueError):
+                decode_mode01(payload, pid)
+
     def test_temperature_and_trim(self):
         self.assertEqual(decode_mode01(bytes.fromhex("41 05 00"), 5)["value"], -40)
         self.assertEqual(decode_mode01(bytes.fromhex("41 0F 64"), 15)["value"], 60)
