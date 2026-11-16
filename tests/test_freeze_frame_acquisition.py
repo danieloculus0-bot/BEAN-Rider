@@ -49,7 +49,7 @@ class FreezeFrameAcquisitionTests(unittest.TestCase):
                 return False
             def reset_input_buffer(self):
                 pass
-        port = Port(b"420C001AF8\\r>")
+        port = Port(b"420C001AF8\r>")
         class SerialModule:
             SerialException = OSError
             def Serial(self, *args, **kwargs):
@@ -57,11 +57,14 @@ class FreezeFrameAcquisitionTests(unittest.TestCase):
                 return port
         fake = SerialModule()
         output = StringIO()
-        with patch.dict(sys.modules, {"serial": fake}), patch.object(sys, "argv",
-                ["bean_rider", "read-freeze-frame", "--port", "FAKE", "--pid", "0x0C"]), \\
-                patch("sys.stdout", output):
+        with (
+            patch.dict(sys.modules, {"serial": fake}),
+            patch.object(sys, "argv",
+                         ["bean_rider", "read-freeze-frame", "--port", "FAKE", "--pid", "0x0C"]),
+            patch("sys.stdout", output),
+        ):
             self.assertEqual(main(), 0)
-        self.assertEqual(port.commands, [b"020C00\\r"])
+        self.assertEqual(port.commands, [b"020C00\r"])
         self.assertEqual(json.loads(output.getvalue())["value"], 1726.0)
         self.assertEqual(fake.options[1]["timeout"], 3.0)
 
