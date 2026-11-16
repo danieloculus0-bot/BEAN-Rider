@@ -88,5 +88,42 @@ class DiagnosticReportTests(unittest.TestCase):
         self.assertIsNone(result["pids"]["speed_kph"]["average"])
 
 
+    def test_dtc_query_status_survives_persisted_summary(self):
+        cases = [
+            ("queried", [], "no_codes_reported", True),
+            ("unavailable", [], "unknown", False),
+            ("not_requested", [], "unknown", False),
+            ("unknown", [], "unknown", False),
+            ("queried", [["P0300", "Misfire"]], "codes_reported", False),
+        ]
+        for status, faults, conclusion, confirmed_free in cases:
+            with self.subTest(status=status, faults=faults):
+                payload = scan(FakeOBDReader()).payload()
+                payload["dtcs"] = faults
+                payload["dtc_query_status"] = status
+                report = summarize_diagnostics([{"body": payload}])
+                self.assertEqual(report["dtc_query_status_latest"], status)
+                self.assertEqual(report["dtc_query_status_counts"][status], 1)
+                self.assertEqual(report["latest_scan_dtc_conclusion"], conclusion)
+                self.assertEqual(report["latest_scan_confirmed_dtc_free"], confirmed_free)
+
+    def test_latest_unavailable_does_not_erase_prior_fault(self):
+        first = scan(FakeOBDReader(faults=[("P0301", "Misfire")])).payload()
+        last = scan(FakeOBDReader()).payload()
+        last["dtc_query_status"] = "unavailable"
+        report = summarize_diagnostics([{"body": first}, {"body": last}])
+        self.assertEqual(report["distinct_reported_dtcs"], 1)
+        self.assertFalse(report["faults"][0]["seen_in_latest_scan"])
+        self.assertEqual(report["latest_scan_dtc_conclusion"], "unknown")
+        self.assertEqual(report["dtc_query_status_counts"]["queried"], 1)
+
+    def test_legacy_scan_status_is_unknown_not_clean(self):
+        legacy = scan(FakeOBDReader()).payload()
+        del legacy["dtc_query_status"]
+        report = summarize_diagnostics([{"body": legacy}])
+        self.assertEqual(report["dtc_query_status_latest"], "unknown")
+        self.assertFalse(report["latest_scan_confirmed_dtc_free"])
+
+
 if __name__ == "__main__":
     unittest.main()
