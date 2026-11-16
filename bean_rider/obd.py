@@ -44,11 +44,13 @@ class Scan:
     dtcs: tuple[tuple[str, str], ...]
     missing_pids: tuple[str, ...]
     source: str
+    dtc_query_status: str = "unknown"
 
     def payload(self):
         return {"schema": "bean.rider.obd.scan.v1", "timestamp_utc": self.timestamp_utc,
                 "values": self.values, "dtcs": [list(x) for x in self.dtcs],
                 "missing_pids": list(self.missing_pids), "source": self.source,
+                "dtc_query_status": self.dtc_query_status,
                 "conclusion": "read_only_observations_not_ecu_calibration"}
 
 
@@ -59,7 +61,18 @@ def scan(reader: Reader, *, dtc: bool = True, timestamp: str | None = None) -> S
             values[label] = _numeric(reader.read(command, unit))
         except (ValueError, AttributeError, LookupError, RuntimeError, TypeError):
             values[label] = None
-    faults = reader.dtcs() if dtc else []
+    faults = []
+    dtc_status = "not_requested"
+    if dtc:
+        try:
+            response = reader.dtcs()
+            if response is None:
+                dtc_status = "unavailable"
+            else:
+                faults = response
+                dtc_status = "queried"
+        except (ValueError, AttributeError, LookupError, RuntimeError, TypeError, OSError):
+            dtc_status = "unavailable"
     cleaned = []
     for code, description in faults:
         if not isinstance(code, str) or len(code)>12 or not isinstance(description, str):
@@ -67,7 +80,7 @@ def scan(reader: Reader, *, dtc: bool = True, timestamp: str | None = None) -> S
         cleaned.append((code, description[:250]))
     return Scan(timestamp or datetime.now(timezone.utc).isoformat(), values,
                 tuple(cleaned), tuple(k for k,v in values.items() if v is None),
-                "obd2_adapter_unverified_sensor_origin")
+                "obd2_adapter_unverified_sensor_origin", dtc_status)
 
 
 class PythonOBDReader:
@@ -106,9 +119,9 @@ class PythonOBDReader:
     def dtcs(self):
         cmd = self._obd.commands.GET_DTC
         if not self.connection.supports(cmd):
-            return []
+            return None
         answer = self.connection.query(cmd)
-        return list(answer.value or []) if not answer.is_null() else []
+        return list(answer.value or []) if not answer.is_null() else None
 
     def close(self):
         self.connection.close()
