@@ -20,7 +20,12 @@ SUPPORTED = {
     0x0F: (1, "intake_c", "degC"),
     0x10: (2, "mass_air_flow_gps", "gram_per_second"),
     0x11: (1, "throttle_pct", "percent"),
+    0x1F: (2, "engine_runtime_s", "second"),
+    0x2F: (1, "fuel_level_pct", "percent"),
+    0x33: (1, "barometric_kpa", "kilopascal"),
     0x42: (2, "control_module_voltage_v", "volt"),
+    0x46: (1, "ambient_c", "degC"),
+    0x5C: (1, "engine_oil_c", "degC"),
 }
 
 
@@ -40,15 +45,17 @@ def decode_mode01(payload: bytes, pid: int) -> dict:
     a = payload[2]
     if pid == 0x0C:
         value = (256 * a + payload[3]) / 4
+    elif pid == 0x1F:
+        value = 256 * a + payload[3]
     elif pid == 0x10:
         value = (256 * a + payload[3]) / 100
     elif pid == 0x42:
         value = (256 * a + payload[3]) / 1000
-    elif pid in (0x05, 0x0F):
+    elif pid in (0x05, 0x0F, 0x46, 0x5C):
         value = a - 40
     elif pid in (0x06, 0x07):
         value = (a - 128) * 100 / 128
-    elif pid in (0x04, 0x11):
+    elif pid in (0x04, 0x11, 0x2F):
         value = a * 100 / 255
     else:
         value = float(a)
