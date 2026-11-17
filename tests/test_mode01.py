@@ -19,6 +19,26 @@ class Mode01Tests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 decode_mode01(payload, pid)
 
+    def test_additional_standard_sensor_pids(self):
+        vectors = (
+            (0x1F, "41 1F 01 2C", "engine_runtime_s", 300, "second"),
+            (0x2F, "41 2F FF", "fuel_level_pct", 100, "percent"),
+            (0x33, "41 33 65", "barometric_kpa", 101, "kilopascal"),
+            (0x46, "41 46 28", "ambient_c", 0, "degC"),
+            (0x5C, "41 5C 50", "engine_oil_c", 40, "degC"),
+        )
+        for pid, raw, name, expected, unit in vectors:
+            with self.subTest(pid=pid):
+                result = decode_mode01(bytes.fromhex(raw), pid)
+                self.assertEqual(result["name"], name)
+                self.assertEqual(result["value"], expected)
+                self.assertEqual(result["unit"], unit)
+                self.assertEqual(result["ecu_writes"], 0)
+                self.assertEqual(result["source"], "raw_obd_mode01_unverified")
+                for malformed in (bytes.fromhex(raw)[:-1], bytes.fromhex(raw) + b"\\x00"):
+                    with self.assertRaises(ValueError):
+                        decode_mode01(malformed, pid)
+
     def test_temperature_and_trim(self):
         self.assertEqual(decode_mode01(bytes.fromhex("41 05 00"), 5)["value"], -40)
         self.assertEqual(decode_mode01(bytes.fromhex("41 0F 64"), 15)["value"], 60)
