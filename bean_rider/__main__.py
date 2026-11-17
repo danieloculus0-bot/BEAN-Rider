@@ -21,6 +21,7 @@ from .power import decide
 from .learning import Comparison, evaluate_comparison, scoreboard
 from .engine_catalog import catalog
 from .diagnostics import summarize_diagnostics
+from .compare_diagnostics import compare_journals
 from .live import LiveConfig, run_dashboard
 from .headunit import ProjectionManager, load_receiver_config
 
@@ -42,6 +43,10 @@ def main() -> int:
     sub.add_parser("ecosystems", help="show supported third-party reference formats")
     diagnostic = sub.add_parser("diagnose", help="summarize recorded DTCs and sensor evidence")
     diagnostic.add_argument("--db", type=Path, required=True, help="existing BEAN-Rider SQLite journal")
+    compare = sub.add_parser("compare-diagnostics",
+                             help="compare two sealed local diagnostic journals, read-only")
+    compare.add_argument("baseline", type=Path)
+    compare.add_argument("followup", type=Path)
     sub.add_parser("engine-families", help="LS/LT-first engine family compatibility roadmap")
     live = sub.add_parser("live", help="local real-time dashboard using a wired OBD-II serial adapter")
     live.add_argument("--port", help="USB/serial ELM327 adapter (COM4 or /dev/ttyUSB0)")
@@ -110,6 +115,11 @@ def main() -> int:
             parser.error("existing journal required; run scan-obd or live first")
         with EventJournal(args.db) as journal:
             _output(summarize_diagnostics(journal.records()))
+    elif args.operation == "compare-diagnostics":
+        try:
+            _output(compare_journals(args.baseline, args.followup))
+        except (ValueError, OSError) as exc:
+            parser.error(str(exc))
     elif args.operation == "verify":
         _output({"verified_report":read_report(args.folder)})
     elif args.operation == "inspect-csv":
