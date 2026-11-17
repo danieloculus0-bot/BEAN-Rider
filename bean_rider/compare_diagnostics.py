@@ -19,6 +19,10 @@ def compare_reports(before: dict, after: dict) -> dict:
     """Preserve missing values and do not confuse DTC absence with repair."""
     a = {row["code"]: row for row in before["faults"]}
     b = {row["code"]: row for row in after["faults"]}
+    baseline_query = before.get("dtc_query_status_latest", "unknown")
+    followup_query = after.get("dtc_query_status_latest", "unknown")
+    # An absent code is only an observed negative if the corresponding
+    # scanner actually completed a DTC query. Never infer repair from it.
     faults = []
     for code in sorted(a.keys() | b.keys()):
         old, new = a.get(code), b.get(code)
@@ -30,6 +34,13 @@ def compare_reports(before: dict, after: dict) -> dict:
             "followup_latest_scan": new["seen_in_latest_scan"] if new else False,
             "classification": "reported_in_both" if old and new else (
                 "newly_reported" if new else "not_reported_in_followup"),
+            "baseline_absence_confirmed": bool(not old and baseline_query == "queried"),
+            "followup_absence_confirmed": bool(not new and followup_query == "queried"),
+            "followup_resolution": (
+                "still_reported" if new else
+                "not_reported_in_queried_followup" if followup_query == "queried"
+                else "unknown_followup_query_unavailable"
+            ),
         })
     sensors = {}
     for key in sorted(before["pids"].keys() | after["pids"].keys()):
@@ -52,6 +63,11 @@ def compare_reports(before: dict, after: dict) -> dict:
         "baseline_last_scan_utc": before["last_scan_utc"],
         "followup_last_scan_utc": after["last_scan_utc"],
         "dtcs": faults,
+        "baseline_dtc_query_status_latest": baseline_query,
+        "followup_dtc_query_status_latest": followup_query,
+        "followup_dtc_evidence": (
+            "queried" if followup_query == "queried" else "unknown"
+        ),
         "pids": sensors,
         "assessment": "descriptive_only_not_repair_or_tuning_validation",
         "limits": [
