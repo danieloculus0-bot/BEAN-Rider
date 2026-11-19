@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .diagnostics import summarize_diagnostics
 from .journal import EventJournal
+from .matched_diagnostics import compare_matched_scans
 
 SCHEMA = "bean.rider.diagnostic_comparison.v1"
 
@@ -86,8 +87,11 @@ def compare_journals(baseline: Path, followup: Path) -> dict:
     with EventJournal(baseline) as first, EventJournal(followup) as second:
         first.verify()
         second.verify()
-        return compare_reports(summarize_diagnostics(first.records()),
-                               summarize_diagnostics(second.records()))
+        before_records, after_records = first.records(), second.records()
+        result = compare_reports(summarize_diagnostics(before_records),
+                                 summarize_diagnostics(after_records))
+        result["condition_matched"] = compare_matched_scans(before_records, after_records)
+        return result
 
 
 def main() -> int:
